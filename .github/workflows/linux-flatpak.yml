@@ -1,0 +1,57 @@
+name: Build experimental Linux Flatpak
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  flatpak:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - name: Check out Linux port
+        uses: actions/checkout@v4
+
+      - name: Free runner disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /opt/hostedtoolcache/CodeQL /usr/share/dotnet
+          df -h .
+
+      - name: Install Flatpak and CPU utilities
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak util-linux
+          flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user --noninteractive flathub org.gnome.Sdk//49 org.gnome.Platform//49
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+
+      - name: Set up pinned Rust toolchain
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal
+          rustup default 1.97.1
+
+      - name: Install JavaScript dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Flatpak
+        run: node scripts/build-linux-flatpak.mjs
+
+      - name: Upload Flatpak
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChemDraft-linux-x86_64
+          path: artifacts/ChemDraft-linux-x86_64.flatpak
+          if-no-files-found: error
+          retention-days: 14
